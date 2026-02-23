@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR PRO CLOUD - Amer</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<style>
+body{font-family:'Cairo',sans-serif;margin:0;background:linear-gradient(135deg,#0d6efd,#0a58ca);color:#fff}
+header{text-align:center;padding:20px;font-size:22px;font-weight:700}
+.container{padding:20px}
+.card{background:#fff;color:#000;padding:15px;border-radius:15px;margin:15px 0}
+input,button{padding:8px;margin:5px;border-radius:8px;border:1px solid #ccc}
+button{background:#0d6efd;color:#fff;border:none;cursor:pointer}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{padding:8px;border-bottom:1px solid #ddd;text-align:center}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<header>🚀 HR PRO CLOUD SYSTEM</header>
+<div class="container">
+
+<div class="card" id="loginCard">
+<h3>🔐 تسجيل الدخول</h3>
+<input type="text" id="loginID" placeholder="User ID">
+<input type="password" id="loginPass" placeholder="Password">
+<button onclick="login()">دخول</button>
+<p id="loginError" style="color:red"></p>
+</div>
+
+<div id="app" class="hidden">
+
+<div class="card">
+<h3>➕ إضافة موظف</h3>
+<input type="text" id="name" placeholder="اسم الموظف">
+<input type="number" id="salary" placeholder="الراتب">
+<button onclick="addEmployee()">حفظ</button>
+</div>
+
+<div class="card">
+<h3>📥 استيراد / تصدير</h3>
+<button onclick="exportData()">📤 تصدير نسخة احتياطية</button>
+<input type="file" id="importFile" onchange="importData(event)">
+</div>
+
+<table>
+<thead><tr><th>الاسم</th><th>الراتب</th><th>حذف</th></tr></thead>
+<tbody id="employeeList"></tbody>
+</table>
+
+<canvas id="salaryChart"></canvas>
+
+</div>
+</div>
+
+<script>
+
+const ADMIN_ID="admin";
+const ADMIN_PASS="1234";
+
+function login(){
+if(document.getElementById("loginID").value===ADMIN_ID && 
+   document.getElementById("loginPass").value===ADMIN_PASS){
+document.getElementById("loginCard").classList.add("hidden");
+document.getElementById("app").classList.remove("hidden");
+render();
+initFirebase();
+}else{
+document.getElementById("loginError").innerText="بيانات غير صحيحة";
+}
+}
+
+function encrypt(data){
+return btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+}
+
+function decrypt(data){
+return JSON.parse(decodeURIComponent(escape(atob(data))));
+}
+
+let employees=[];
+
+function saveLocal(){
+localStorage.setItem("employees_secure", encrypt(employees));
+}
+
+function loadLocal(){
+let data=localStorage.getItem("employees_secure");
+if(data){ employees=decrypt(data); }
+}
+
+loadLocal();
+
+function addEmployee(){
+employees.push({
+name:document.getElementById("name").value,
+salary:+document.getElementById("salary").value
+});
+saveLocal();
+syncToCloud();
+render();
+document.getElementById("name").value="";
+document.getElementById("salary").value="";
+}
+
+function deleteEmployee(i){
+employees.splice(i,1);
+saveLocal();
+syncToCloud();
+render();
+}
+
+function render(){
+let list=document.getElementById("employeeList");
+list.innerHTML="";
+employees.forEach((e,i)=>{
+list.innerHTML+=`<tr>
+<td>${e.name}</td>
+<td>${e.salary}</td>
+<td><button onclick="deleteEmployee(${i})">🗑️</button></td>
+</tr>`;
+});
+renderChart();
+}
+
+let chart;
+function renderChart(){
+if(chart) chart.destroy();
+chart=new Chart(document.getElementById("salaryChart"),{
+type:"bar",
+data:{
+labels:employees.map(e=>e.name),
+datasets:[{label:"الرواتب",data:employees.map(e=>e.salary)}]
+}
+});
+}
+
+function exportData(){
+let blob=new Blob([encrypt(employees)],{type:"text/plain"});
+let a=document.createElement("a");
+a.href=URL.createObjectURL(blob);
+a.download="HR_Backup.txt";
+a.click();
+}
+
+function importData(event){
+let file=event.target.files[0];
+let reader=new FileReader();
+reader.onload=function(e){
+employees=decrypt(e.target.result);
+saveLocal();
+render();
+};
+reader.readAsText(file);
+}
+
+let database;
+
+function initFirebase(){
+
+const firebaseConfig={
+apiKey:"YOUR_API_KEY",
+authDomain:"YOUR_AUTH_DOMAIN",
+databaseURL:"YOUR_DATABASE_URL",
+projectId:"YOUR_PROJECT_ID",
+storageBucket:"YOUR_BUCKET",
+messagingSenderId:"YOUR_SENDER_ID",
+appId:"YOUR_APP_ID"
+};
+
+firebase.initializeApp(firebaseConfig);
+database=firebase.database();
+
+database.ref("employees").on("value",snapshot=>{
+if(snapshot.exists()){
+employees=snapshot.val();
+saveLocal();
+render();
+}
+});
+}
+
+function syncToCloud(){
+if(database){
+database.ref("employees").set(employees);
+}
+}
+
+</script>
+</body>
+</html>
